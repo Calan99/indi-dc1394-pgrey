@@ -1,0 +1,8 @@
+<devGroup group="CCDs">
+        <device label="DC1394 Point Grey Chameleon">
+                <driver name="DC1394_PGREY">indi_dc1394_pgrey</driver>
+                <version>0.1</version>
+        </device>
+</devGroup>
+
+

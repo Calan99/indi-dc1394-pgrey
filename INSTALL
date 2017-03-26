@@ -1,0 +1,7 @@
+Point Grey Chameleon dc1394 INDI driver install
+=======================
+This package uses CMake to build:
+
+1) cmake .
+2) make
+3) As root, make install
