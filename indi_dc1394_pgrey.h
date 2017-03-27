@@ -49,11 +49,11 @@ protected:
     void TimerHit();
     void addFITSKeywords(fitsfile *fptr, CCDChip *targetChip);
     bool UpdateCCDBin(int binx, int biny);
-    
-	IPState GuideNorth(float ms);    
-	IPState GuideSouth(float ms);    	
-	IPState GuideWest(float ms);    	
-	IPState GuideEast(float ms);    	
+
+    IPState GuideNorth(float ms);
+    IPState GuideSouth(float ms);
+    IPState GuideWest(float ms);
+    IPState GuideEast(float ms);
 
 private:
     // Utility functions
