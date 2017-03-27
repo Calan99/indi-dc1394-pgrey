@@ -69,8 +69,8 @@ private:
     uint32_t width;
     uint32_t height;
     
-    float gain_min = 0;
-    float gain_max = 5;
+    float gain_min;
+    float gain_max;
     
     dc1394video_mode_t selected_mode;
     

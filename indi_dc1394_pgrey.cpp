@@ -278,7 +278,7 @@ bool DC1394_PGREY::initProperties() {
     addAuxControls();
 
 	// Add Gain control 
-    IUFillNumberVector(&SettingsNP, SettingsN, 1, getDeviceName(), "GAIN", "Gain settings", IMAGE_SETTINGS_TAB, IP_RW, 1, IPS_IDLE);
+    IUFillNumberVector(&SettingsNP, SettingsN, 1, getDeviceName(), "GAIN", "Gain settings", MAIN_CONTROL_TAB, IP_RW, 1, IPS_IDLE);
     
     IUFillNumber(&TemperatureN[0], "TEMPERATURE", "Camera Temp.", "%.2f", -50, 60, 0.5, 0);
     IUFillNumberVector(&TemperatureNP, TemperatureN, 1, getDeviceName(), "Temperature", "Temp.", IMAGE_SETTINGS_TAB, IP_RO, 1, IPS_IDLE);
