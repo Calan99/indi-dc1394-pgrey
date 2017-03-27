@@ -60,6 +60,7 @@ private:
     float CalcTimeLeft();
     void  setupParams();
     void  grabImage();
+    float GetTemperature();
 
     // Are we exposing?
     bool InExposure;
@@ -79,6 +80,7 @@ private:
     
     dc1394video_mode_t selected_mode;
     
+    bool temperatureCanRead;
     INumberVectorProperty SettingsNP;
     INumber SettingsN[1];
     
@@ -89,7 +91,6 @@ private:
     dc1394_t *dc1394;
     dc1394camera_t *dcam;
 
-//    float last_duration;
 };
 
 #endif // DC1394_PGREY_H

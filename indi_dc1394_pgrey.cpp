@@ -95,7 +95,7 @@ bool DC1394_PGREY::Connect() {
     uint32_t val;
     dc1394format7mode_t fm7;
     dc1394feature_info_t feature;
-    float min, max;
+    float min, max, temp;
     dc1394video_modes_t modes;
 	dc1394framerates_t framerates;    
 
@@ -250,16 +250,47 @@ bool DC1394_PGREY::Connect() {
         IDMessage(getDeviceName(), "Unable to disable white balance!");
         return false;
     }
-
+    
+	/* try to read temperature sensor and store flag if it's possible */
+	if((temp = GetTemperature()) >= 0) {
+		IDMessage(getDeviceName(), "Device Temperature : %.2f (C)", temp  );    		
+		temperatureCanRead = true;
+	}else{
+		temperatureCanRead = false;
+	}	
+ 	
     err = dc1394_capture_setup(dcam,4, DC1394_CAPTURE_FLAGS_DEFAULT);
 
     return true;
 }
 
+
+
+float DC1394_PGREY::GetTemperature() {
+
+    dc1394error_t err;
+    uint32_t val;
+
+	err = dc1394_get_control_register(dcam, 0x82c, &val);
+    if (err != DC1394_SUCCESS) {
+        IDMessage(getDeviceName(), "Unable to access Temperature register");        
+        return -1;
+    }
+    
+    if(val & 0x80000000) {
+		return (float)(val << 20 >> 20)/10 - 273.15;
+	}	
+	
+	IDMessage(getDeviceName(), "Could not read Temperature (register value = %x)",val );
+	return -1;	
+	
+}	
+
 bool DC1394_PGREY::Disconnect() {
     if (dcam) {
         dc1394_capture_stop(dcam);
         dc1394_camera_free(dcam);
+        temperatureCanRead = false;
     }
 
     IDMessage(getDeviceName(), "Point Grey Chameleon disconnected successfully!");
@@ -271,6 +302,7 @@ const char * DC1394_PGREY::getDefaultName() {
 }
 
 bool DC1394_PGREY::initProperties() {
+	
     // Must init parent properties first!
     INDI::CCD::initProperties();
 
@@ -279,9 +311,10 @@ bool DC1394_PGREY::initProperties() {
 
 	// Add Gain control 
     IUFillNumberVector(&SettingsNP, SettingsN, 1, getDeviceName(), "GAIN", "Gain settings", MAIN_CONTROL_TAB, IP_RW, 1, IPS_IDLE);
-    
-    IUFillNumber(&TemperatureN[0], "TEMPERATURE", "Camera Temp.", "%.2f", -50, 60, 0.5, 0);
-    IUFillNumberVector(&TemperatureNP, TemperatureN, 1, getDeviceName(), "Temperature", "Temp.", IMAGE_SETTINGS_TAB, IP_RO, 1, IPS_IDLE);
+
+	IUFillNumber(&TemperatureN[0], "TEMPERATURE", "Camera Temp. (C)", "%.2f", -50, 70, 0.1, 0);
+	IUFillNumberVector(&TemperatureNP, TemperatureN, 1, getDeviceName(), "Temperature", "Temp.", MAIN_CONTROL_TAB, IP_RO, 1, IPS_IDLE);
+
 
     return true;
 }
@@ -325,6 +358,8 @@ bool DC1394_PGREY::UpdateCCDBin(int binx, int biny) {
 
 void DC1394_PGREY::setupParams() {
 	
+	float temp;
+	
     // The Pointgrey Chameleon has Sony ICX445 CCD sensor
     SetCCDParams(width, height, 16, 3.75, 3.75);
 
@@ -333,6 +368,7 @@ void DC1394_PGREY::setupParams() {
     nbuf = PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * PrimaryCCD.getBPP()/8;
     nbuf += 512; //  leave a little extra at the end
     PrimaryCCD.setFrameBufferSize(nbuf);
+    	
 }
 
 
@@ -357,7 +393,7 @@ float DC1394_PGREY::CalcTimeLeft() {
 bool DC1394_PGREY::ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n) {
 
     INumber *np;
-    float c_gain;
+    float c_gain, temp;
     dc1394error_t err;
 
 	if (!strcmp(dev, getDeviceName())) {
@@ -382,7 +418,14 @@ bool DC1394_PGREY::ISNewNumber(const char *dev, const char *name, double values[
 			IDSetNumber(&SettingsNP, NULL);
 			
 			return true;
-        }
+        }else if(!strcmp(name,TemperatureNP.name)) {
+		    if((temp = GetTemperature()) >= 0) {
+				TemperatureN[0].value = temp;
+				IDMessage(getDeviceName(), "New temp set ");
+				IDSetNumber(&TemperatureNP, NULL);				
+			}										
+			return true;
+		}	
     }
       
     // If we didn't process anything above, let the parent handle it.
@@ -392,9 +435,6 @@ bool DC1394_PGREY::ISNewNumber(const char *dev, const char *name, double values[
 
 
 bool DC1394_PGREY::ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n) {
-    /*if (strcmp(dev, getDeviceName()) == 0) {
-     
-    }*/
     
     //  Nobody has claimed this, so, ignore it
     return INDI::CCD::ISNewSwitch(dev, name, states, names, n);
@@ -409,6 +449,7 @@ void DC1394_PGREY::addFITSKeywords(fitsfile *fptr, CCDChip *targetChip) {
 void DC1394_PGREY::TimerHit() {
     long timeleft;
     int timerID = -1;
+    float temp;
 
     if(isConnected() == false) {
         return;  //  No need to reset timer if we are not connected anymore
@@ -449,6 +490,13 @@ void DC1394_PGREY::TimerHit() {
 			PrimaryCCD.setExposureLeft(timeleft);
 		}
 	}
+	
+	// read temperature sensor (if enabled)
+	if(temperatureCanRead && (temp = GetTemperature()) >= 0) {
+		TemperatureN[0].value = temp;
+		IDSetNumber(&TemperatureNP, NULL);
+	}	
+
 
   if (timerID == -1)
     SetTimer(POLLMS);
@@ -502,8 +550,10 @@ void DC1394_PGREY::grabImage() {
 }
 
 bool DC1394_PGREY::StartExposure(float duration) {
+    
     dc1394error_t err;
-    float fval;
+    float fval, temp;
+    dc1394video_frame_t *frame;
 
     ExposureRequest = duration;
 
@@ -527,13 +577,33 @@ bool DC1394_PGREY::StartExposure(float duration) {
     }
     IDMessage(getDeviceName(), "Set shutter value to %f.", fval);    
 
+
+    /* Flush the DMA buffer */
+    while (1) {
+       err=dc1394_capture_dequeue(dcam, DC1394_CAPTURE_POLICY_POLL, &frame);
+       if (err != DC1394_SUCCESS) {
+            IDMessage(getDeviceName(), "Flushing DMA buffer failed!");
+            break;
+       }
+       if (!frame) {
+           break;
+       }
+       dc1394_capture_enqueue(dcam, frame);
+    }
+
+
     IDMessage(getDeviceName(), "start transmission");
     err = dc1394_video_set_transmission(dcam, DC1394_ON);
     if (err != DC1394_SUCCESS) {
             IDMessage(getDeviceName(), "Unable to start transmission");
             return false;
     }
-
+/*
+    if(temperatureCanRead && (temp = GetTemperature()) >= 0) {
+		TemperatureN[0].value = temp;
+		IDSetNumber(&TemperatureNP, NULL);
+	}	
+*/
 	// actual grabbing to do in grabImage 
     return true;
 }
