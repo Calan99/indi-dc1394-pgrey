@@ -534,6 +534,26 @@ bool DC1394_PGREY::StartExposure(float duration) {
             return false;
     }
 
-	// actual grabbing in grabImage 
+	// actual grabbing to do in grabImage 
     return true;
+}
+
+IPState DC1394_PGREY::GuideNorth(float ms) {
+	INDI_UNUSED(ms);
+	return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideSouth(float ms) {
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideEast(float ms) {
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideWest(float ms) {
+    INDI_UNUSED(ms);
+    return IPS_OK;
 }

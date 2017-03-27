@@ -49,6 +49,11 @@ protected:
     void TimerHit();
     void addFITSKeywords(fitsfile *fptr, CCDChip *targetChip);
     bool UpdateCCDBin(int binx, int biny);
+    
+	IPState GuideNorth(float ms);    
+	IPState GuideSouth(float ms);    	
+	IPState GuideWest(float ms);    	
+	IPState GuideEast(float ms);    	
 
 private:
     // Utility functions
@@ -81,11 +86,10 @@ private:
     INumber TemperatureN[1];
     INumberVectorProperty TemperatureNP;
     
-
     dc1394_t *dc1394;
     dc1394camera_t *dcam;
 
-    float last_duration;
+//    float last_duration;
 };
 
 #endif // DC1394_PGREY_H
