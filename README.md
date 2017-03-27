@@ -3,6 +3,7 @@
 INDI driver (DC1394 based) for Point Grey Chameleon camera CMLN-13S2M (Monochrome)
 Allows exposures to 32sec. 
 Has Gain control
+
 May work for other similar cameras
 
 Requirements
