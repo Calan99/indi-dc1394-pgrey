@@ -30,7 +30,9 @@
 #include "indi_dc1394_pgrey.h"
 #include <dc1394/dc1394.h>
 
-const int POLLMS = 250;
+//const int POLLMS = 250;
+//moved into initProperties
+
 const float GAIN_DEFAULT = 1;
 
 std::unique_ptr<DC1394_PGREY> dc1394_pgrey(new DC1394_PGREY());
@@ -150,9 +152,42 @@ bool DC1394_PGREY::Connect()
 
     // selected_mode = modes.modes[modes.num-1];
 
-    selected_mode = DC1394_VIDEO_MODE_1280x960_MONO16; 	// DC1394_VIDEO_MODE_640x480_MONO16 ;
+    //selected_mode = DC1394_VIDEO_MODE_1280x960_MONO16; 	// DC1394_VIDEO_MODE_640x480_MONO16 ;
+    
+    selected_mode = DC1394_VIDEO_MODE_FORMAT7_1;	//resolution no greater than 640x480, pixel format MONO16 according to technical specifications by manufacturer
 
     IDMessage(getDeviceName(), "Current mode: %d",selected_mode);
+
+    err = dc1394_format7_set_image_position(dcam,selected_mode, 0, 0);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not set image upper left corner position");
+        return false;
+    }
+
+
+    err = dc1394_format7_set_image_size(dcam,selected_mode,640,480);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not set format7 image size");
+        return false;
+    }
+ 
+    err = dc1394_format7_set_color_coding(dcam,selected_mode,DC1394_COLOR_CODING_MONO8);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not set format7 color coding");
+        return false;
+    }
+    //Apparently, framerates make sense only with non-scalable video formats. Timestamp: 20230409
+    /*
+    err = dc1394_video_get_supported_framerates(dcam,selected_mode,&framerates);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not get frame rates");
+        return false;
+    }
+
 
     err = dc1394_video_get_supported_framerates(dcam,selected_mode,&framerates);
     if (err != DC1394_SUCCESS)
@@ -169,6 +204,7 @@ bool DC1394_PGREY::Connect()
         dc1394_framerate_as_float(rate,&f_rate);
         IDMessage(getDeviceName(), "  [%d] rate = %f\n",j,f_rate);
     }
+    */
 
     err = dc1394_video_set_mode(dcam, selected_mode);
     if (err != DC1394_SUCCESS)
@@ -176,6 +212,8 @@ bool DC1394_PGREY::Connect()
         IDMessage(getDeviceName(), "Unable to connect to set videomode!");
         return false;
     }
+
+    DEBUG(INDI::Logger::DBG_SESSION,  "Connected in format7");
 
     err = dc1394_get_image_size_from_video_mode(dcam, selected_mode, &width,&height);
     if (err != DC1394_SUCCESS)
@@ -196,12 +234,15 @@ bool DC1394_PGREY::Connect()
 
     /* Set frame rate to the lowest possible */
     //err = dc1394_video_set_framerate(dcam, DC1394_FRAMERATE_7_5);
+    //Again, framerate here does not make sense. Timestamp: 20230409
+    /*
     err = dc1394_video_set_framerate(dcam, DC1394_FRAMERATE_1_875);
     if (err != DC1394_SUCCESS)
     {
         IDMessage(getDeviceName(), "Unable to connect to set framerate!");
         return false;
     }
+    */
     /* Turn frame rate control off to enable extended exposure */
     err = dc1394_feature_set_power(dcam, DC1394_FEATURE_FRAME_RATE, DC1394_OFF);
     if (err != DC1394_SUCCESS)
@@ -299,7 +340,7 @@ bool DC1394_PGREY::Connect()
         temperatureCanRead = false;
     }
 
-    err = dc1394_capture_setup(dcam,4, DC1394_CAPTURE_FLAGS_DEFAULT);
+    err = dc1394_capture_setup(dcam,10, DC1394_CAPTURE_FLAGS_DEFAULT);
 
     return true;
 }
@@ -362,6 +403,7 @@ bool DC1394_PGREY::initProperties()
     IUFillNumber(&TemperatureN[0], "TEMPERATURE", "Camera Temp. (C)", "%.2f", -50, 70, 0.1, 0);
     IUFillNumberVector(&TemperatureNP, TemperatureN, 1, getDeviceName(), "Temperature", "Temp.", MAIN_CONTROL_TAB, IP_RO, 1, IPS_IDLE);
 
+    setDefaultPollingPeriod(250);
 
     return true;
 }
@@ -416,11 +458,12 @@ void DC1394_PGREY::setupParams()
     float temp;
 
     // The Pointgrey Chameleon has Sony ICX445 CCD sensor
-    SetCCDParams(width, height, 16, 3.75, 3.75);
+    SetCCDParams(width, height, 8, 7.5, 7.5);
 
     // How much memory we need for the frame buffer
     int nbuf;
     nbuf = PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * PrimaryCCD.getBPP()/8;
+    //DEBUG(INDI::Logger::DBG_SESSION, "xres:%d, yres:%d", PrimaryCCD.getXres, PrimaryCCD.getYres);
     nbuf += 512; //  leave a little extra at the end
     PrimaryCCD.setFrameBufferSize(nbuf);
 
@@ -510,11 +553,27 @@ bool DC1394_PGREY::ISNewSwitch(const char * dev, const char * name, ISState * st
 }
 
 
-void DC1394_PGREY::addFITSKeywords(fitsfile * fptr, CCDChip * targetChip)
+/*void DC1394_PGREY::addFITSKeywords(fitsfile * fptr, CCDChip * targetChip)
 {
     // Let's first add parent keywords
     INDI::CCD::addFITSKeywords(fptr, targetChip);
+}*/
+
+
+/////////////////////////////////////////////////////////
+/// Add applicable FITS keywords to header (copied from atikccd driver)
+/////////////////////////////////////////////////////////
+void DC1394_PGREY::addFITSKeywords(INDI::CCDChip *targetChip)
+{
+    INDI::CCD::addFITSKeywords(targetChip);
+
+    /*if (m_isHorizon)
+    {
+        fitsKeywords.push_back({"GAIN", ControlN[CONTROL_GAIN].value, 3, "Gain"});
+        fitsKeywords.push_back({"OFFSET", ControlN[CONTROL_OFFSET].value, 3, "Offset"});
+    }*/
 }
+
 
 void DC1394_PGREY::TimerHit()
 {
@@ -589,6 +648,156 @@ void DC1394_PGREY::TimerHit()
     return;
 }
 
+/*
+void DC1394_PGREY::grabImage()
+{
+    unsigned char * myimage;
+    dc1394error_t err;
+    dc1394video_frame_t * frame;
+    uint32_t uheight, uwidth;
+    uint16_t val;
+    struct timeval start, end;
+
+    DEBUG(INDI::Logger::DBG_SESSION,  "Grabber called");
+    // Let's get a pointer to the frame buffer
+    unsigned char * image = PrimaryCCD.getFrameBuffer();
+
+    // Get width and height
+    int width = PrimaryCCD.getSubW() / PrimaryCCD.getBinX();
+    int height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY();
+
+	DEBUG(INDI::Logger::DBG_SESSION,  "Got width and heigth");
+
+    memset(image, 0, PrimaryCCD.getFrameBufferSize());
+
+    DEBUG(INDI::Logger::DBG_SESSION,  "memset");
+
+    gettimeofday(&start, NULL);
+
+    DEBUG(INDI::Logger::DBG_SESSION,  "Time");
+
+    err=dc1394_capture_dequeue(dcam, DC1394_CAPTURE_POLICY_WAIT, &frame);
+    DEBUG(INDI::Logger::DBG_SESSION,  "Set err");
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not capture frame");
+    }
+    DEBUG(INDI::Logger::DBG_SESSION,  "Frame captured");
+    //dc1394_get_image_size_from_video_mode(dcam,DC1394_VIDEO_MODE_1280x960_MONO16, &uwidth, &uheight);
+    dc1394_get_image_size_from_video_mode(dcam,selected_mode, &uwidth, &uheight);
+    if (DC1394_TRUE == dc1394_capture_is_frame_corrupt(dcam, frame))
+    {
+        IDMessage(getDeviceName(), "Corrupt frame!");
+        return ;
+    }
+
+    memcpy(image,frame->image,height*width*2);
+    //memcpy(image,frame->image,height*width); 20230410
+
+    // release buffer
+    dc1394_capture_enqueue(dcam, frame);
+
+    dc1394_video_set_transmission(dcam,DC1394_OFF);
+
+    IDMessage(getDeviceName(), "Download complete.");
+    gettimeofday(&end, NULL);
+    IDMessage(getDeviceName(), "Download took %.2f s", (float)((end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec))/ 1000000);
+
+    // Let INDI::CCD know we're done filling the image buffer
+    ExposureComplete(&PrimaryCCD);
+}
+
+
+bool DC1394_PGREY::StartExposure(float duration)
+{
+
+    dc1394error_t err;
+    float fval, temp;
+    dc1394video_frame_t * frame;
+
+    ExposureRequest = duration;
+
+    // Since we have only have one CCD with one chip, we set the exposure duration of the primary CCD
+    PrimaryCCD.setBPP(16);
+    PrimaryCCD.setExposureDuration(duration);
+
+    gettimeofday(&ExpStart,NULL);
+
+    InExposure = true;
+
+    IDMessage(getDeviceName(), "Triggering a %f second exposure ",duration);
+
+    err = dc1394_feature_set_absolute_value(dcam, DC1394_FEATURE_SHUTTER, duration);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to set shutter value.");
+    }
+    err = dc1394_feature_get_absolute_value(dcam, DC1394_FEATURE_SHUTTER, &fval);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to get shutter value.");
+    }
+    IDMessage(getDeviceName(), "Set shutter value to %f.", fval);
+
+
+     //Flush the DMA buffer 
+    while (1)
+    {
+        err=dc1394_capture_dequeue(dcam, DC1394_CAPTURE_POLICY_POLL, &frame);
+        if (err != DC1394_SUCCESS)
+        {
+            IDMessage(getDeviceName(), "Flushing DMA buffer failed!");
+            break;
+        }
+        if (!frame)
+        {
+            break;
+        }
+        dc1394_capture_enqueue(dcam, frame);
+    }
+
+
+    IDMessage(getDeviceName(), "start transmission");
+    err = dc1394_video_set_transmission(dcam, DC1394_ON);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to start transmission");
+        return false;
+    }
+    //
+    //    if(temperatureCanRead && (temp = GetTemperature()) >= 0) {
+    //		TemperatureN[0].value = temp;
+    //		IDSetNumber(&TemperatureNP, NULL);
+    //	}
+    //
+    // actual grabbing to do in grabImage
+    return true;
+}
+
+IPState DC1394_PGREY::GuideNorth(float ms)
+{
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideSouth(float ms)
+{
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideEast(float ms)
+{
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}
+
+IPState DC1394_PGREY::GuideWest(float ms)
+{
+    INDI_UNUSED(ms);
+    return IPS_OK;
+}*/
+
 void DC1394_PGREY::grabImage()
 {
     unsigned char * myimage;
@@ -604,6 +813,7 @@ void DC1394_PGREY::grabImage()
     // Get width and height
     int width = PrimaryCCD.getSubW() / PrimaryCCD.getBinX();
     int height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY();
+    IDMessage(getDeviceName(), "Size: (%d,%d)", width, height);
 
     memset(image, 0, PrimaryCCD.getFrameBufferSize());
 
@@ -622,7 +832,7 @@ void DC1394_PGREY::grabImage()
         return ;
     }
 
-    memcpy(image,frame->image,height*width*2);
+    memcpy(image,frame->image,height*width);
 
     // release buffer
     dc1394_capture_enqueue(dcam, frame);
@@ -647,7 +857,8 @@ bool DC1394_PGREY::StartExposure(float duration)
     ExposureRequest = duration;
 
     // Since we have only have one CCD with one chip, we set the exposure duration of the primary CCD
-    PrimaryCCD.setBPP(16);
+    //PrimaryCCD.setBPP(16);
+    PrimaryCCD.setBPP(8);
     PrimaryCCD.setExposureDuration(duration);
 
     gettimeofday(&ExpStart,NULL);
