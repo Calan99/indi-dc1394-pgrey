@@ -109,6 +109,9 @@ bool DC1394_PGREY::Connect()
     float min, max, temp;
     dc1394video_modes_t modes;
     dc1394framerates_t framerates;
+    dc1394color_codings_t codings;
+    dc1394color_coding_t current_coding;
+    uint32_t depth;
 
     dc1394 = dc1394_new();
     if (!dc1394)
@@ -158,7 +161,25 @@ bool DC1394_PGREY::Connect()
 
     IDMessage(getDeviceName(), "Current mode: %d",selected_mode);
 
-    err = dc1394_format7_set_image_position(dcam,selected_mode, 0, 0);
+    err = dc1394_video_set_mode(dcam, selected_mode);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to connect to set videomode!");
+        return false;
+    }
+
+    uint32_t mwidth;
+    uint32_t mheight;
+    err=dc1394_format7_get_max_image_size(dcam,selected_mode, &mwidth, &mheight);
+    if(err != DC1394_SUCCESS){
+	IDMessage(getDeviceName(), "Unable to connect to read maximum image size");
+        return false;
+    }
+    else{
+	    IDMessage(getDeviceName(), "Maximum image size: %ld x %ld", mwidth, mheight);
+    }
+
+    err = dc1394_format7_set_image_position(dcam,selected_mode, 4, 0);
     if (err != DC1394_SUCCESS)
     {
         IDMessage(getDeviceName(), "Could not set image upper left corner position");
@@ -173,11 +194,86 @@ bool DC1394_PGREY::Connect()
         return false;
     }
  
+    //Test8
+    //err = dc1394_format7_set_color_coding(dcam,selected_mode,DC1394_COLOR_CODING_MONO16);
     err = dc1394_format7_set_color_coding(dcam,selected_mode,DC1394_COLOR_CODING_MONO8);
     if (err != DC1394_SUCCESS)
     {
         IDMessage(getDeviceName(), "Could not set format7 color coding");
         return false;
+    }
+
+    err = dc1394_video_get_data_depth(dcam,&depth);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Could not get camera color depth");
+        return false;
+    }
+    IDMessage(getDeviceName(), "Data depth: %d", depth);
+    
+    err = dc1394_format7_get_color_codings(dcam,selected_mode,&codings);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to get list of supported color codings");
+        return false;
+    }
+    IDMessage(getDeviceName(), "Number of Supported modes: %d",codings.num);
+    //IDMessage(getDeviceName(), "Supported modes: %d",codings.codings);
+
+    int cusu;
+    for(cusu=0; cusu<codings.num; cusu++){
+	    if(codings.codings[cusu]==DC1394_COLOR_CODING_MONO8){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_MONO8", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_YUV411){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_YUV411", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_YUV422){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_YUV422", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_YUV444){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_YUV444", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_RGB8){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_RGB8", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_MONO16){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_MONO16", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_RGB16){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_RGB16", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_MONO16S){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_MONO16S", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_RGB16S){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_RGB16S", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_RAW8){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_RAW8", cusu);
+	    }
+	    else if(codings.codings[cusu]==DC1394_COLOR_CODING_RAW16){
+		IDMessage(getDeviceName(), "Supported color coding %d: DC1394_COLOR_CODING_RAW16", cusu);
+	    }
+	    else{
+		IDMessage(getDeviceName(), "Coding not in the list of libdc1394");
+	    }
+    }
+
+    err = dc1394_format7_get_color_coding(dcam,selected_mode,&current_coding);
+    if (err != DC1394_SUCCESS)
+    {
+        IDMessage(getDeviceName(), "Unable to get current color coding");
+        return false;
+    }
+    //Test8
+    //if(current_coding != DC1394_COLOR_CODING_MONO16){
+    if(current_coding != DC1394_COLOR_CODING_MONO8){
+	    IDMessage(getDeviceName(), "Color was not set correctly");
+    }
+    else{
+        //IDMessage(getDeviceName(), "MONO16 set correctly");
+        IDMessage(getDeviceName(), "MONO8 set correctly");
     }
     //Apparently, framerates make sense only with non-scalable video formats. Timestamp: 20230409
     /*
@@ -206,12 +302,14 @@ bool DC1394_PGREY::Connect()
     }
     */
 
+    /* Let's try it bfore specifying size and depth
     err = dc1394_video_set_mode(dcam, selected_mode);
     if (err != DC1394_SUCCESS)
     {
         IDMessage(getDeviceName(), "Unable to connect to set videomode!");
         return false;
     }
+    */
 
     DEBUG(INDI::Logger::DBG_SESSION,  "Connected in format7");
 
@@ -340,7 +438,7 @@ bool DC1394_PGREY::Connect()
         temperatureCanRead = false;
     }
 
-    err = dc1394_capture_setup(dcam,10, DC1394_CAPTURE_FLAGS_DEFAULT);
+    err = dc1394_capture_setup(dcam,5, DC1394_CAPTURE_FLAGS_DEFAULT);
 
     return true;
 }
@@ -458,13 +556,17 @@ void DC1394_PGREY::setupParams()
     float temp;
 
     // The Pointgrey Chameleon has Sony ICX445 CCD sensor
+    //Test8
+    //SetCCDParams(width, height, 16, 7.5, 7.5);
     SetCCDParams(width, height, 8, 7.5, 7.5);
 
     // How much memory we need for the frame buffer
     int nbuf;
+    //Test8
     nbuf = PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * PrimaryCCD.getBPP()/8;
+    //nbuf = PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * 16/8;
     //DEBUG(INDI::Logger::DBG_SESSION, "xres:%d, yres:%d", PrimaryCCD.getXres, PrimaryCCD.getYres);
-    nbuf += 512; //  leave a little extra at the end
+    nbuf += 4096; //  leave a little extra at the end
     PrimaryCCD.setFrameBufferSize(nbuf);
 
 }
@@ -807,6 +909,8 @@ void DC1394_PGREY::grabImage()
     uint16_t val;
     struct timeval start, end;
 
+    IDMessage(getDeviceName(), "Bytes allocated for image: %ld", frame->allocated_image_bytes);
+
     // Let's get a pointer to the frame buffer
     unsigned char * image = PrimaryCCD.getFrameBuffer();
 
@@ -818,8 +922,11 @@ void DC1394_PGREY::grabImage()
     memset(image, 0, PrimaryCCD.getFrameBufferSize());
 
     gettimeofday(&start, NULL);
+    
+    IDMessage(getDeviceName(), "Next instruction is dequeue");
 
     err=dc1394_capture_dequeue(dcam, DC1394_CAPTURE_POLICY_WAIT, &frame);
+        IDMessage(getDeviceName(), "Dequeued!");
     if (err != DC1394_SUCCESS)
     {
         IDMessage(getDeviceName(), "Could not capture frame");
@@ -829,9 +936,12 @@ void DC1394_PGREY::grabImage()
     if (DC1394_TRUE == dc1394_capture_is_frame_corrupt(dcam, frame))
     {
         IDMessage(getDeviceName(), "Corrupt frame!");
+    	IDMessage(getDeviceName(), "Size of corrupt frame: (%ld,%ld)", uwidth, uheight);
         return ;
     }
 
+    //Test8
+    //memcpy(image,frame->image,height*width*2);
     memcpy(image,frame->image,height*width);
 
     // release buffer
@@ -857,6 +967,7 @@ bool DC1394_PGREY::StartExposure(float duration)
     ExposureRequest = duration;
 
     // Since we have only have one CCD with one chip, we set the exposure duration of the primary CCD
+    //Test8
     //PrimaryCCD.setBPP(16);
     PrimaryCCD.setBPP(8);
     PrimaryCCD.setExposureDuration(duration);
@@ -880,7 +991,7 @@ bool DC1394_PGREY::StartExposure(float duration)
     IDMessage(getDeviceName(), "Set shutter value to %f.", fval);
 
 
-    /* Flush the DMA buffer */
+    // Flush the DMA buffer
     while (1)
     {
         err=dc1394_capture_dequeue(dcam, DC1394_CAPTURE_POLICY_POLL, &frame);
@@ -893,7 +1004,8 @@ bool DC1394_PGREY::StartExposure(float duration)
         {
             break;
         }
-        dc1394_capture_enqueue(dcam, frame);
+        err=dc1394_capture_enqueue(dcam, frame);	
+            IDMessage(getDeviceName(), "Enqueued");
     }
 
 
